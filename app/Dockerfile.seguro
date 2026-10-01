@@ -1,0 +1,20 @@
+# Version corregida del Dockerfile, para comparar en el ejercicio 3.
+FROM python:3.12-slim
+
+# Crear un usuario sin privilegios: si alguien logra ejecutar codigo
+# dentro del contenedor, no lo hace como root.
+RUN useradd --create-home --shell /bin/bash appuser
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app_segura.py .
+
+# Bajar privilegios ANTES de ejecutar la aplicacion.
+USER appuser
+
+EXPOSE 8000
+
+CMD ["python", "app_segura.py"]

@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────────────────────────
+# Versión corregida, para comparar. Extensión .ejemplo para que
+# Terraform no la cargue junto con main.tf.
+# ─────────────────────────────────────────────────────────────
+
+locals {
+  # Etiquetas obligatorias, en un solo lugar y reutilizables.
+  tags_comunes = {
+    Proyecto    = "practica-modulo7"
+    Ambiente    = "desarrollo"
+    Equipo      = "devops-curso"
+    CentroCosto = "CC-0001"
+    GestionadoPor = "terraform"
+  }
+}
+
+# ── ARREGLO 1 y 2 — Bucket privado, cifrado, versionado y etiquetado ──
+resource "aws_s3_bucket" "datos" {
+  bucket = "mi-bucket-de-prueba-modulo7"
+  tags   = local.tags_comunes
+}
+
+resource "aws_s3_bucket_public_access_block" "datos" {
+  bucket                  = aws_s3_bucket.datos.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "datos" {
+  bucket = aws_s3_bucket.datos.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "datos" {
+  bucket = aws_s3_bucket.datos.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# ── ARREGLO 3 — SSH solo desde la red interna ──
+resource "aws_security_group" "web" {
+  name        = "web-sg"
+  description = "Security group de la app"
+  tags        = local.tags_comunes
+
+  ingress {
+    description = "SSH solo desde la VPN corporativa"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/8"]
+  }
+
+  egress {
+    description = "HTTPS saliente"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# ── ARREGLO 4 — Instancia dimensionada según uso real y etiquetada ──
+resource "aws_instance" "api" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t3.medium"   # 2 vCPU · 4 GB, según el p95 medido
+
+  metadata_options {
+    http_tokens = "required"    # IMDSv2 obligatorio
+  }
+
+  tags = local.tags_comunes
+}

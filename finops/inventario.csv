@@ -1,0 +1,15 @@
+nombre,ambiente,tipo,vcpu_asignadas,vcpu_p95,costo_mensual_usd,interrumpible,apagable,proyecto,equipo
+k8s-prod-nodo-1,produccion,compute,8,5.2,620.00,no,no,AppWeb,pagos
+k8s-prod-nodo-2,produccion,compute,8,5.4,620.00,no,no,AppWeb,pagos
+k8s-prod-nodo-3,produccion,compute,8,1.1,560.00,no,no,AppWeb,pagos
+rds-prod-principal,produccion,database,16,3.0,700.00,no,no,AppWeb,pagos
+k8s-staging-nodo-1,staging,compute,4,1.2,450.00,no,si,AppWeb,pagos
+k8s-staging-nodo-2,staging,compute,4,0.9,450.00,no,si,AppWeb,pagos
+rds-staging,staging,database,4,0.2,220.00,no,si,AppWeb,pagos
+runner-ci-1,ci,compute,4,3.8,250.00,si,no,Plataforma,devops
+runner-ci-2,ci,compute,4,3.7,250.00,si,no,Plataforma,devops
+worker-etl-nocturno,produccion,compute,8,7.6,380.00,si,no,Analitica,datos
+cache-redis-prod,produccion,cache,2,0.4,180.00,no,no,AppWeb,pagos
+dev-sandbox-juan,desarrollo,compute,4,0.3,190.00,no,si,,
+instancia-vieja-2024,desconocido,compute,2,0.0,95.00,no,si,,
+bastion-host,produccion,compute,2,0.1,45.00,no,no,Plataforma,devops
