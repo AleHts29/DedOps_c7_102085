@@ -1,0 +1,123 @@
+# ─────────────────────────────────────────────────────────────
+# devsecops.yml — Pipeline de seguridad del Módulo 7
+#
+# Cuatro jobs que corren EN PARALELO, porque no dependen entre sí.
+# Cada uno cubre una capa distinta de la slide "Lo que ni SAST ni
+# DAST ven": código, dependencias, imagen e infraestructura.
+# ─────────────────────────────────────────────────────────────
+
+name: DevSecOps
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+# Mínimo privilegio: los jobs solo necesitan leer el código.
+permissions:
+  contents: read
+
+jobs:
+
+  # ── 1. SAST: analiza TU código ────────────────────────────
+  sast:
+    name: SAST — análisis del código
+    runs-on: ubuntu-latest
+    # Se usa la imagen oficial de Semgrep, igual que en el ejercicio 1.
+    # (La vieja semgrep/semgrep-action está archivada desde 2024.)
+    container: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep
+        run: |
+          semgrep scan --error \
+            --config p/security-audit \
+            --config p/secrets \
+            --config p/python
+        # continue-on-error deja el pipeline en verde aunque haya
+        # hallazgos. Es lo correcto al INTRODUCIR el escáner en un
+        # proyecto existente. Cuando el equipo ya limpió la deuda,
+        # se saca esta línea y el job empieza a bloquear de verdad.
+        continue-on-error: true
+
+  # ── 2. SCA + secretos: analiza lo que NO escribiste vos ───
+  dependencias:
+    name: SCA — dependencias y secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # gitleaks necesita TODO el historial
+
+      - name: Trivy — vulnerabilidades en dependencias
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: '0'    # ponelo en '1' cuando quieras bloquear
+
+      - name: gitleaks — secretos en el historial de Git
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  # ── 3. Container scanning: analiza la imagen ──────────────
+  imagen:
+    name: Escaneo de la imagen Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construir la imagen
+        run: docker build -t practica:ci app/
+
+      - name: Trivy — vulnerabilidades del sistema base
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: practica:ci
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+
+  # ── 4. IaC scanning: analiza tu infraestructura ───────────
+  infraestructura:
+    name: IaC — Terraform y manifiestos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov — revisión de Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          soft_fail: true   # ponelo en false cuando quieras bloquear
+
+  # ── 5. DAST: ataca la app corriendo ───────────────────────
+  # Depende de los anteriores: no tiene sentido atacar una app
+  # cuya imagen ni siquiera se pudo construir.
+  dast:
+    name: DAST — OWASP ZAP contra la app viva
+    runs-on: ubuntu-latest
+    needs: [ imagen ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Levantar la aplicación
+        run: |
+          docker build -t practica:ci app/
+          docker run -d -p 8000:8000 --name app practica:ci
+          sleep 5
+          curl -f http://localhost:8000/ || (docker logs app && exit 1)
+
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: 'http://localhost:8000'
+          cmd_options: '-a'
+          # Por defecto la acción abre un issue con el reporte; con
+          # permisos de solo lectura eso falla, así que se desactiva.
+          allow_issue_writing: false
+        continue-on-error: true
